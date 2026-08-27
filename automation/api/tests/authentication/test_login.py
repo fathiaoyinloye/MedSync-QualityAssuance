@@ -4,8 +4,8 @@ import requests
 
 @pytest.mark.smoke
 @pytest.mark.critical
-def test_login_with_valid_credentials(base_url, admin_credentials):
- 
+def test_login_with_valid_credentials(base_url, admin_credentials, login_throttle):
+    login_throttle()
     response = requests.post(
         f"{base_url}/api/v1/auth/token/",
         json=admin_credentials,
@@ -19,8 +19,8 @@ def test_login_with_valid_credentials(base_url, admin_credentials):
 
 
 @pytest.mark.critical
-def test_refresh_token_is_never_in_response_body(base_url, admin_credentials):
-    
+def test_refresh_token_is_never_in_response_body(base_url, admin_credentials, login_throttle):
+    login_throttle()
     response = requests.post(
         f"{base_url}/api/v1/auth/token/",
         json=admin_credentials,
@@ -41,7 +41,9 @@ def test_refresh_token_is_never_in_response_body(base_url, admin_credentials):
         ("fathiaoyinloye21@gmail.com", "", "empty_password"),
     ],
 )
-def test_login_rejects_invalid_credentials(base_url, email, password, case_name):
+def test_login_rejects_invalid_credentials(base_url, email, password, case_name, login_throttle):
+  
+    login_throttle()
     response = requests.post(
         f"{base_url}/api/v1/auth/token/",
         json={"email": email, "password": password},
@@ -61,7 +63,6 @@ def test_authenticated_request_succeeds_with_valid_token(base_url, auth_headers)
 @pytest.mark.regression
 @pytest.mark.negative
 def test_protected_endpoint_rejects_missing_token(base_url):
-    """No Authorization header at all — confirms auth is actually enforced."""
     response = requests.get(f"{base_url}/api/v1/auth/me/")
     assert response.status_code == 401
 
@@ -69,7 +70,6 @@ def test_protected_endpoint_rejects_missing_token(base_url):
 @pytest.mark.regression
 @pytest.mark.negative
 def test_protected_endpoint_rejects_garbage_token(base_url):
-    """Present but invalid token — a different failure mode than no token at all."""
     bad_headers = {"Authorization": "Bearer this.is.not.a.real.token"}
     response = requests.get(f"{base_url}/api/v1/auth/me/", headers=bad_headers)
     assert response.status_code == 401
