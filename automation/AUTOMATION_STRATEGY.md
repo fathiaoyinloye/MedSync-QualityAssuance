@@ -145,6 +145,27 @@ instead of deletion). This has a direct consequence for automated tests:
   against — this is accepted as a deliberate, necessary cost, not something
   to eliminate.
 
+### 10.1 Real-World Update: Hit the Plan's Patient Quota
+
+Confirmed in practice, not hypothetical: the QA tenant is subject to the
+same `max_patients` plan limit as a real customer (per the `Plan` schema —
+Starter-tier caps at 50). Automated registration testing hit this ceiling.
+
+**Two-part response:**
+1. **Environment-level (the real fix, outside test code):** request either
+   a higher-tier/unlimited plan for the QA tenant specifically, or a
+   periodic reset mechanism (nightly/pre-CI) for the QA database. A test
+   environment should not be bound by the same commercial constraints as a
+   paying customer.
+2. **Code-level (within our control, applied now):** any fixture that only
+   needs to *read* an existing patient (not test the act of creating one)
+   should be scoped broader than `function` — e.g. `scope="module"` — so
+   it creates ONE patient shared by every test in that file, not one per
+   test. Applied to `registered_patient` in `tests/patients/conftest.py`.
+   Tests that ARE testing patient creation itself (Registration's tests)
+   cannot be consolidated this way — they inherently consume quota per run,
+   which is exactly why the environment-level fix above still matters.
+
 ---
 
 *Next: Phase 2 — Project Setup & Architecture (pytest project skeleton).*

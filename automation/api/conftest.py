@@ -1,3 +1,4 @@
+# Location: 07_Automation/API/conftest.py
 
 import os
 import time
@@ -23,10 +24,17 @@ def throttle_login_call():
     _last_login_call_at["ts"] = time.time()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def login_throttle():
+    """
+    Session-scoped: this just hands back a reference to the same stateless
+    module-level function every time — there's no per-test state living
+    inside the fixture itself (the actual rate-limit clock is the separate
+    _last_login_call_at dict, which persists for the whole process
+    regardless of fixture scope). Elevating this to session scope is what
+    allows role_headers below to also be session-scoped.
+    """
     return throttle_login_call
-
 
 @pytest.fixture(scope="session")
 def base_url():
@@ -88,12 +96,20 @@ def role_token_cache():
     return {}
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def role_headers(role_token_cache, base_url, login_throttle):
     """
     Fixture FACTORY — returns a function, not a fixed value, so a test can
     choose which role to log in as at call time:
         headers = role_headers("RECEPTIONIST")
+
+    Now session-scoped (was function-scoped). This fixes a real scope
+    conflict: pytest doesn't allow a broader-scoped fixture (like the
+    module-scoped registered_patient in tests/patients/conftest.py) to
+    depend on a narrower-scoped one. Since role_token_cache already does
+    the real caching work, there's no downside to role_headers itself
+    being session-scoped too — it's just handing back a small factory
+    function either way.
     """
     def _get(role: str):
         role = role.upper()
