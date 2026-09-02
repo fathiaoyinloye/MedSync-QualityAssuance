@@ -1,0 +1,46 @@
+"""
+RBAC coverage for patient registration — Phase 5.2 follow-up.
+
+Why this is its own file instead of being folded into test_registration.py:
+those tests check the endpoint's CONTRACT (what fields it needs, what MRN
+it returns). This file checks its ACCESS CONTROL (who is even allowed to
+call it) — a different concern, worth being able to run, read, and reason
+about on its own.
+
+IMPORTANT — how to extend this file safely:
+Don't add a new @pytest.mark.parametrize row with a guessed expected
+status for a role you haven't actually tried. Run it once against that
+role first (e.g. `pytest -k test_clinical_roles_cannot_register -s`,
+reading the real response), confirm what the API actually does, THEN
+encode that as an assertion here. Encoding a guess would silently turn
+this into a test that can never fail — it would just re-assert whatever
+you assumed instead of catching a real regression.
+"""
+import pytest
+import requests
+
+PATIENTS_URL = "/api/v1/patients/"
+
+
+@pytest.mark.regression
+class TestPatientRegistrationRBAC:
+
+    def test_receptionist_can_register(self, base_url, receptionist_headers, minimal_private_patient):
+        """The one role MedSync_Roles.md explicitly documents for this action."""
+        resp = requests.post(f"{base_url}{PATIENTS_URL}", json=minimal_private_patient, headers=receptionist_headers)
+        assert resp.status_code == 201, resp.text
+
+    @pytest.mark.parametrize("role", ["DOCTOR", "NURSE", "LAB_TECH", "PHARMACIST"])
+    def test_clinical_roles_cannot_register(self, base_url, role_headers, minimal_private_patient, role):
+        """
+        None of these roles are documented as registering patients — they
+        receive an already-registered patient further down the flow. If
+        any of these unexpectedly succeeds, that's a real authorization
+        defect worth raising, not a fixture problem.
+        """
+        headers = role_headers(role)
+        resp = requests.post(f"{base_url}{PATIENTS_URL}", json=minimal_private_patient, headers=headers)
+        assert resp.status_code == 403, (
+            f"Expected {role} to be forbidden from registering patients, "
+            f"got {resp.status_code}: {resp.text}"
+        )

@@ -165,6 +165,112 @@ Endpoint inventory (full scenario mapping deferred to Phase 5.3 — Consultation
 - `/api/v1/pharmacy/prescription-items/{id}/substitute/`
 - `/api/v1/pharmacy/dispense/`, `/api/v1/pharmacy/batches/`, `/api/v1/pharmacy/drugs/`
 - `/api/v1/pharmacy/requisitions/` — Store Keeper restock workflow
+# Priority 5 update
+
+Replaces the "endpoint inventory, full mapping deferred" placeholders for
+Consultations/Clinical, Laboratory, and Pharmacy, now that the full OpenAPI
+schema is available. Same caveat applies everywhere below as it did for
+Patients: **the schema documents field shape, never role permission.**
+`security: [jwtAuth: []]` on an endpoint means "must be logged in," nothing
+more — it does not mean "any logged-in role may call this." Every POST/action
+endpoint below needs the same discover-then-assert RBAC treatment
+test_registration_rbac.py established for patient registration before we
+trust who can actually call it.
+
+---
+
+## Encounters (`/api/v1/encounters/`)
+
+| Endpoint | Required fields | Notes |
+|---|---|---|
+| POST `/api/v1/encounters/` | `patient` only | `encounter_type` (OPD/IPD/EMERGENCY/PROCEDURE), `status`, `chief_complaint`, `appointment` all optional |
+| POST `/{id}/claim/` | — | Doctor picks up an encounter; **idempotent** — a second claim by anyone is a no-op, first claim wins. Good idempotency test target. |
+| POST `/{id}/finalise/` | — | |
+| GET `/{id}/timeline/` | — | Chronological summary of all clinical events |
+| POST `/{id}/approve-zero/` | — | Biller-only zero-Naira clearance (emergency/pay-later) — unlocks Lab/Pharmacy without payment |
+| POST `/{id}/pre-approve/` | — | **PRIVATE only**, idempotent, optional reason note. Payment still due, just deferred — distinct from approve-zero's waiver |
+| POST `/{id}/clear-billing/` | — | **Newly surfaced by the full schema — not in the original inventory.** No description given; needs investigation before Phase 5.3 tests are written against it |
+| POST `/{id}/clear-hmo/` | — | **Newly surfaced, same as above** — undocumented purpose, needs investigation |
+
+`EncounterDetail` exposes the gating fields flow tests will assert on:
+`billing_cleared`, `billing_cleared_zero`, `hmo_cleared`, `pre_approved` —
+these are the fields that prove R-003 (HMO vs Private billing) is actually
+enforced end-to-end.
+
+## Vitals (`/api/v1/clinical/vitals/`)
+
+- POST `/api/v1/clinical/vitals/` — **only `encounter` is required.** Every
+  clinical field (bp_systolic, bp_diastolic, pulse, temperature, spo2,
+  respiratory_rate, weight_kg, height_cm, muac) is optional. Worth a
+  deliberate test: does a vitals record with zero actual vitals get accepted?
+  If so, that's a real gap worth flagging, not just an oversight in our test.
+- GET `/history/` — filterable by `encounter` or `patient`, newest first.
+
+## Diagnoses (`/api/v1/clinical/diagnoses/`)
+
+- POST — required: `encounter`, `icd_code`. Optional: `icd_version`
+  (ICD10/ICD11), `free_text`, `status` (WORKING/CONFIRMED/QUERIED/RULED_OUT),
+  `is_primary`.
+- GET/PUT/PATCH/DELETE by id — **doctor-only, encounter must still be open**
+  (per the schema's own description). Confirms the earlier note: a Diagnosis
+  can be hard-deleted (no downstream FK), unlike a Prescription.
+
+## Clinical Notes (`/api/v1/clinical/notes/`)
+
+- POST — required: `encounter`, `note_type` (HISTORY/EXAMINATION/ASSESSMENT/
+  PLAN/PROGRESS/DISCHARGE). **`content` is NOT marked required** in the
+  schema — worth a negative test: can a note be created with empty content?
+- `/finalise/`, `/addendum/` — no fields documented beyond the path id.
+
+## Referrals (`/api/v1/clinical/referrals/`)
+
+- POST — required: `encounter`, `reason`. `route` enum is INTERNAL (another
+  department) vs EXTERNAL (another facility) — confirmed as its own field,
+  worth the two separate positive tests already planned.
+- Actions: `/accept/`, `/decline/`, `/complete/`, `/cancel/`,
+  `/authorise-hmo/`, `/clear-billing/`, `/letter.pdf`.
+
+## Laboratory (`/api/v1/lab/`)
+
+- POST `/api/v1/lab/orders/` — **the schema lists NO required fields at all**
+  for `LabOrderRequest` (patient, encounter, priority, clinical_info,
+  test_ids are all shown as optional). That's almost certainly an
+  under-annotated schema rather than the real behavior — a lab order with no
+  patient and no tests shouldn't be creatable. Treat this as a hypothesis to
+  test, not a confirmed fact: send a minimal/empty body and see what actually
+  comes back before writing the "required field" negative tests here.
+- Actions: `/collect/`, `/cancel/`, `/confirm-payment/`.
+- POST `/api/v1/lab/results/` — required: `lab_order_item` only.
+- `/results/{id}/verify/` — no fields beyond path id.
+- Useful filters confirmed on `/lab/orders/`: `hmo_approval_status`,
+  `priority` (ROUTINE/URGENT/STAT), `requires_payment`,
+  `ready_for_collection`, `payment_pending` — good candidates for filter
+  correctness tests later.
+
+## Pharmacy (`/api/v1/pharmacy/`)
+
+- POST `/api/v1/pharmacy/prescriptions/` — required: `encounter`, `items`
+  (array). Each item (`PrescriptionItemWriteRequest`) requires `dose` and
+  `quantity_prescribed`; `drug` is nullable (supports non-formulary drugs via
+  `non_formulary_name`).
+- `/{id}/approve/` — pharmacist review step; optional body lets pharmacy
+  supply less than prescribed per line (`quantity_to_supply`,
+  `shortfall_reason`); no body = approve everything at prescribed quantity.
+  **Runs before the money gate on purpose** (schema's own description) — a
+  real business rule worth its own test: billing must price what pharmacy
+  can actually supply, not what the doctor originally ordered.
+- `/{id}/cancel/`, `/{id}/confirm-payment/`.
+- `/prescription-items/{id}/close-short/` — replaces a documented prior bug
+  (`mark_item_fulfilled` falsely marking non-stocked drugs as dispensed) —
+  confirmed regression-test target, as already flagged.
+- `/prescription-items/{id}/substitute/`.
+
+---
+
+*Still deferred: Admissions, Referrals-detail-edge-cases, Users/RBAC,
+Appointments/Workflow (now fully documented in the schema but still out of
+the original 10-module scope — revisit that scoping decision now that we can
+see they're fully-built modules, not stubs).*
 
 ## Priority 6 — Admissions (`/api/v1/admissions/`)
 
