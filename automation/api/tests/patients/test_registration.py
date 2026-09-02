@@ -109,16 +109,6 @@ class TestPatientRegistrationNegative:
 
     @pytest.mark.parametrize("field", ["first_name", "address"])
     def test_sql_injection_payload_does_not_break_the_request(self, base_url, receptionist_headers, minimal_private_patient, field):
-        """
-        WEAK CHECK BY DESIGN — name reflects exactly what this proves and
-        no more. A 200/201/400 status code only confirms the payload didn't
-        crash the request; it does NOT confirm the backend uses
-        parameterized queries, and there is no database inspection here.
-        A payload that succeeded silently while being stored unchanged would
-        still pass this check. Real SQL-injection verification needs either
-        a code-level review of the query layer, or dedicated security
-        tooling — not something a black-box API test can fully prove.
-        """
         payload = dict(minimal_private_patient)
         payload[field] = "'; DROP TABLE patients; --"
         resp = requests.post(f"{base_url}{PATIENTS_URL}", json=payload, headers=receptionist_headers)
@@ -126,7 +116,7 @@ class TestPatientRegistrationNegative:
 
     @pytest.mark.critical
     @pytest.mark.parametrize("field", ["first_name", "address"])
-    def test_xss_payload_is_sanitized(self, base_url, receptionist_headers, minimal_private_patient, field):
+    def test_xss_payload_is_safely_handled(self, base_url, receptionist_headers, minimal_private_patient, field):
         payload = dict(minimal_private_patient)
         payload[field] = "<script>alert(1)</script>"
         resp = requests.post(f"{base_url}{PATIENTS_URL}", json=payload, headers=receptionist_headers)
