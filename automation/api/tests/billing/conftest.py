@@ -24,7 +24,7 @@ def billing_test_patient(role_headers, base_url):
         "patient_type": "PRIVATE",
     }
     resp = requests.post(f"{base_url}/api/v1/patients/", json=payload, headers=headers)
-    resp.raise_for_status()
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -34,5 +34,5 @@ def draft_invoice(biller_headers, base_url, billing_test_patient):
     since most tests need to mutate an invoice's status without affecting others."""
     payload = {"patient": billing_test_patient["id"]}
     resp = requests.post(f"{base_url}/api/v1/billing/invoices/", json=payload, headers=biller_headers)
-    resp.raise_for_status()
+    assert resp.status_code == 201, resp.text
     return resp.json()

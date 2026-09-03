@@ -24,12 +24,6 @@ def test_issue_invoice_changes_status(base_url, biller_headers, draft_invoice):
 
 @pytest.mark.critical
 def test_invoices_summary_is_server_side_aggregate(base_url, biller_headers):
-    """
-    Per API_TEST_MAPPING.md: summary must be a server-side aggregate, not
-    something the client could compute by summing a paginated page. We
-    can't fully verify the math here without a controlled dataset, but we
-    confirm the endpoint returns a coherent aggregate shape, not raw list data.
-    """
     resp = requests.get(f"{base_url}{BASE_INVOICES}summary/", headers=biller_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), dict), "Summary should be one aggregate object, not a list"
@@ -52,3 +46,14 @@ def test_cancel_already_cancelled_invoice_is_rejected(base_url, biller_headers, 
 def test_create_invoice_without_patient_returns_400(base_url, biller_headers):
     resp = requests.post(f"{base_url}{BASE_INVOICES}", json={}, headers=biller_headers)
     assert resp.status_code == 400
+
+
+
+
+
+
+
+
+
+
+    

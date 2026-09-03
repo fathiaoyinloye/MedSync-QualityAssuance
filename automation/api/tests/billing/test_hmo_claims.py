@@ -30,13 +30,13 @@ def hmo_invoice(biller_headers, base_url, role_headers):
         },
         headers=receptionist,
     )
-    patient_resp.raise_for_status()
+    assert patient_resp.status_code == 201, patient_resp.text
     invoice_resp = requests.post(
         f"{base_url}/api/v1/billing/invoices/",
         json={"patient": patient_resp.json()["id"]},
         headers=biller_headers,
     )
-    invoice_resp.raise_for_status()
+    assert invoice_resp.status_code == 201, invoice_resp.text
     return invoice_resp.json()
 
 
